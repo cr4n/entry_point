@@ -15,7 +15,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-#      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       POSTGRES_USER: postgres
@@ -83,7 +83,7 @@ services:
       - POSTGRES_PORT=$(POSTGRES_PORT)
       - POSTGRES_HOST=${POSTGRES_HOST}
 volumes:
-# postgres_data:
+  postgres_data:
   rabbitmq_data:
   rabbitmq_log:
 #  grafana_data:
