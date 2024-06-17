@@ -1,0 +1,14 @@
+{
+    "anonymous": False,
+    "inputs": [
+        {"indexed": True, "internalType": "bytes32", "name": "userOpHash", "type": "bytes32"},
+        {"indexed": True, "internalType": "address", "name": "sender", "type": "address"},
+        {"indexed": True, "internalType": "address", "name": "paymaster", "type": "address"},
+        {"indexed": False, "internalType": "uint256", "name": "nonce", "type": "uint256"},
+        {"indexed": False, "internalType": "bool", "name": "success", "type": "bool"},
+        {"indexed": False, "internalType": "uint256", "name": "actualGasCost", "type": "uint256"},
+        {"indexed": False, "internalType": "uint256", "name": "actualGasUsed", "type": "uint256"},
+    ],
+    "name": "UserOperationEvent",
+    "type": "event"
+}
