@@ -60,20 +60,20 @@ dashboard_payload = {
         "panels": [
             {
                 "title": "User Operations Per Hour",
-                "type": "timeseries",
-                "gridPos": {"x": 0, "y": 0, "w": 24, "h": 9},
+                "type": "barchart",
+                "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
-                        "refId": "A",
+                        "refId": "B",
                         "rawSql": '''
                             SELECT 
-                              date_trunc('hour', snapshot_timestamp) AS hour,
+                              date_trunc('hour', snapshot_timestamp) AS time,
                               CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN bundlers b ON b.address = rao.address
-                              GROUP BY 1 ORDER BY 1                           
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
                     }
@@ -84,7 +84,7 @@ dashboard_payload = {
                         "mappings": [],
                         "thresholds": {
                             "mode": "absolute",
-                            "steps": [{"color": "green", "value": None}]
+                            "steps": [{"color": "blue", "value": None}]
                         }
                     }
                 },
@@ -108,12 +108,12 @@ dashboard_payload = {
                         "refId": "B",
                         "rawSql": '''
                             SELECT 
-                              date_trunc('minute', snapshot_timestamp) AS minute,
+                              date_trunc('minute', snapshot_timestamp) AS time,
                               CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN bundlers b ON b.address = rao.address
-                              GROUP BY 1 ORDER BY 1                           
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
                     }
@@ -148,12 +148,12 @@ dashboard_payload = {
                         "refId": "B",
                         "rawSql": '''
                             SELECT 
-                              date_trunc('second', snapshot_timestamp) AS second,
+                              date_trunc('second', snapshot_timestamp) AS time,
                               CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN bundlers b ON b.address = rao.address
-                              GROUP BY 1 ORDER BY 1                           
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
                     }
@@ -177,7 +177,7 @@ dashboard_payload = {
                         "placement": "bottom"
                     }
                 }
-            }
+            },
         ],
         "time": {
             "from": "now-5m",
