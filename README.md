@@ -30,7 +30,7 @@ cd entry_point
 docker-compose up --build
 ```
 
-4. Open Grafana in a Web browser:
+4. Open Grafana in a Web browser - (user:admin/password:admin):
 ```
 https://localhost:3000
 ```

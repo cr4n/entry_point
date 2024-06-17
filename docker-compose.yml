@@ -15,7 +15,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-#      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./consumer/bundlers.csv:/docker-entrypoint-initdb.d/bundlers.csv      
     environment:
@@ -45,8 +45,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PORT=$(POSTGRES_PORT)
       - POSTGRES_HOST=${POSTGRES_HOST}      
-#    volumes:
-#      - grafana_data:/var/lib/grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
 
   listener:
     container_name: listener
@@ -84,7 +84,7 @@ services:
       - POSTGRES_PORT=$(POSTGRES_PORT)
       - POSTGRES_HOST=${POSTGRES_HOST}
 volumes:
-#  postgres_data:
+  postgres_data:
   rabbitmq_data:
   rabbitmq_log:
-#  grafana_data:
+  grafana_data:
