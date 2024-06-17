@@ -67,7 +67,7 @@ dashboard_payload = {
                     {
                         "refId": "A",
                         "rawSql": '''
-                            SELECT date_trunct('hour', snapshot_timestamp) AS minute, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1"                            
+                            SELECT date_trunc('hour', snapshot_timestamp) AS hour, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1                           
                             ''',
                         "format": "time_series"
                     }
@@ -100,7 +100,7 @@ dashboard_payload = {
                 "targets": [
                     {
                         "refId": "B",
-                        "rawSql": "SELECT date_trunct('minute', snapshot_timestamp) AS minute, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1",
+                        "rawSql": "SELECT date_trunc('minute', snapshot_timestamp) AS minute, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1",
                         "format": "time_series"
                     }
                 ],
