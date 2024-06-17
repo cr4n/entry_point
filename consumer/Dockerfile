@@ -1,11 +1,9 @@
 FROM python:3.7
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    build-essential && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install necessary dependencies including psql
+RUN apt-get update && apt-get install -y \
+postgresql-client \
+&& rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app

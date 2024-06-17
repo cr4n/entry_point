@@ -5,7 +5,6 @@ import logging
 import time
 import psycopg2 as pg
 import pika
-import pandas as pd
 
 def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,6 +32,22 @@ def connect_to_postgres(params):
     except Exception as e:
         logger.error(f"Failed to connect to PostgreSQL: {e}")
         raise
+
+def load_csv_to_postgres(csv_file_path, conn, table_name):
+    """
+    Load CSV data into a PostgreSQL table.
+    """
+    try:
+        cur = conn.cursor()
+        
+        with open(csv_file_path, 'r') as f:
+            next(f)  # Skip the header row
+            cur.copy_from(f, table_name, sep=',')
+        conn.commit()
+        logger.info(f"Data loaded into table {table_name} successfully.")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to load data into table {table_name}: {e}")
 
 def setup_database(conn):
     """
@@ -67,23 +82,6 @@ def setup_database(conn):
         cur.execute(create_table_query)
         conn.commit()
         logger.info("Table `raw_user_operations` ensured to exist")
-
-        create_bundlers_table_query = '''
-        CREATE TABLE IF NOT EXISTS pipeline.bundlers (
-            entity_name VARCHAR(255),
-            address VARCHAR(255),
-            ethereum BOOLEAN,
-            polygon BOOLEAN,
-            arbitrum BOOLEAN,
-            optimism BOOLEAN,
-            bnb BOOLEAN,
-            avalanche BOOLEAN,
-            base BOOLEAN
-        )
-        '''
-        cur.execute(create_bundlers_table_query)
-        conn.commit()
-        logger.info("Table `bundlers` ensured to exist")
 
     except Exception as e:
         logger.error(f"Failed to setup PostgreSQL database: {e}")
@@ -143,29 +141,6 @@ def callback(ch, method, properties, body):
     finally:
         if conn:
             conn.close()
-
-
-def load_csv_to_postgres(csv_file_path, conn, table_name):
-    """
-    Load CSV data into a PostgreSQL table.
-    """
-    # Read the CSV file
-    df = pd.read_csv(csv_file_path)
-    
-    # Create a temporary CSV file
-    temp_csv = "/tmp/temp_bundlers.csv"
-    df.to_csv(temp_csv, index=False, header=False)
-
-    try:
-        cur = conn.cursor()
-        with open(temp_csv, 'r') as f:
-            cur.copy_from(f, table_name, sep=',')
-        conn.commit()
-        logger.info(f"Data loaded into table {table_name} successfully.")
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Failed to load data into table {table_name}: {e}")
-
     
 def main():
     """
@@ -177,7 +152,6 @@ def main():
     logger.info("Connecting to PostgreSQL...")
     conn = connect_to_postgres(postgres_params)
     setup_database(conn)
-    load_csv_to_postgres('bundlers.csv', conn, 'bundlers')
     conn.close()
 
     logger.info("Connecting to RabbitMQ...")

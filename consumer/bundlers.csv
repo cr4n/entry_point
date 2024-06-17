@@ -1,4 +1,4 @@
-Entity Name,Address,Ethereum,Polygon,Arbitrum,Optimism,BNB,Avalanche,Base
+EntityName,Address,Ethereum,Polygon,Arbitrum,Optimism,BNB,Avalanche,Base
 Alchemy,0x34716d493d69b11fd52d3242cf1eeec8585a1491,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
 Alchemy,0x4a25d28d10b02bcf13a16068f56d167d8f96d093,TRUE,TRUE,TRUE,TRUE,TRUE,FALSE,TRUE
 Alchemy,0x2ce3fb4ea6a849cc49f68bdbeaa4912a920bdfd8,TRUE,TRUE,TRUE,TRUE,TRUE,FALSE,FALSE
