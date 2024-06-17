@@ -48,6 +48,7 @@ def setup_database(conn):
 
         create_table_query = '''
         CREATE TABLE IF NOT EXISTS pipeline.raw_user_operations (
+            snapshot_timestamp TIMESTAMP,
             user_op_hash VARCHAR(255),
             sender VARCHAR(255),
             paymaster VARCHAR(255),
