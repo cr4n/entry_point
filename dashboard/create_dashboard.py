@@ -59,7 +59,7 @@ dashboard_payload = {
         "refresh": "5s",
         "panels": [
             {
-                "title": "User Operations Over Time",
+                "title": "User Operations Per Hour",
                 "type": "timeseries",
                 "gridPos": {"x": 0, "y": 0, "w": 24, "h": 9},
                 "datasource": "PostgreSQL",
@@ -67,7 +67,13 @@ dashboard_payload = {
                     {
                         "refId": "A",
                         "rawSql": '''
-                            SELECT date_trunc('hour', snapshot_timestamp) AS hour, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1                           
+                            SELECT 
+                              date_trunc('hour', snapshot_timestamp) AS hour,
+                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              COUNT(*) AS value 
+                              FROM pipeline.raw_user_operations rao
+                              LEFT JOIN bundlers b ON b.address = rao.address
+                              GROUP BY 1 ORDER BY 1                           
                             ''',
                         "format": "time_series"
                     }
@@ -93,6 +99,46 @@ dashboard_payload = {
                 }
             },
             {
+                "title": "User Operations Per Minute",
+                "type": "barchart",
+                "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
+                "datasource": "PostgreSQL",
+                "targets": [
+                    {
+                        "refId": "B",
+                        "rawSql": '''
+                            SELECT 
+                              date_trunc('minute', snapshot_timestamp) AS minute,
+                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              COUNT(*) AS value 
+                              FROM pipeline.raw_user_operations rao
+                              LEFT JOIN bundlers b ON b.address = rao.address
+                              GROUP BY 1 ORDER BY 1                           
+                            ''',
+                        "format": "time_series"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "color": {"mode": "palette-classic"},
+                        "mappings": [],
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [{"color": "blue", "value": None}]
+                        }
+                    }
+                },
+                "options": {
+                    "tooltip": {
+                        "mode": "single"
+                    },
+                    "legend": {
+                        "displayMode": "table",
+                        "placement": "bottom"
+                    }
+                }
+            },
+            {
                 "title": "User Operations Per Second",
                 "type": "barchart",
                 "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
@@ -100,7 +146,15 @@ dashboard_payload = {
                 "targets": [
                     {
                         "refId": "B",
-                        "rawSql": "SELECT date_trunc('minute', snapshot_timestamp) AS minute, COUNT(*) AS value FROM pipeline.raw_user_operations GROUP BY 1 ORDER BY 1",
+                        "rawSql": '''
+                            SELECT 
+                              date_trunc('second', snapshot_timestamp) AS second,
+                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              COUNT(*) AS value 
+                              FROM pipeline.raw_user_operations rao
+                              LEFT JOIN bundlers b ON b.address = rao.address
+                              GROUP BY 1 ORDER BY 1                           
+                            ''',
                         "format": "time_series"
                     }
                 ],
