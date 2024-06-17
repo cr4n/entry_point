@@ -72,7 +72,7 @@ dashboard_payload = {
                               CASE WHEN(CONTAINS('0xa', rao.address)) THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
                               GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
@@ -113,7 +113,7 @@ dashboard_payload = {
                               CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
                               GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
@@ -154,7 +154,7 @@ dashboard_payload = {
                               CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.address
+                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
                               GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
