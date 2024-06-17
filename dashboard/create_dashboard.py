@@ -65,11 +65,11 @@ dashboard_payload = {
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
-                        "refId": "B",
+                        "refId": "A",
                         "rawSql": '''
                             SELECT 
                               date_trunc('hour', snapshot_timestamp) AS time,
-                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              CASE WHEN(CONTAINS('0xa', rao.address)) THEN 'Biconomy' ELSE 'Other' END AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
                               LEFT JOIN pipeline.bundlers b ON b.address = rao.address
@@ -89,6 +89,7 @@ dashboard_payload = {
                     }
                 },
                 "options": {
+                    "stacked": True,
                     "tooltip": {
                         "mode": "single"
                     },
@@ -129,6 +130,7 @@ dashboard_payload = {
                     }
                 },
                 "options": {
+                    "stacked": True,
                     "tooltip": {
                         "mode": "single"
                     },
@@ -145,7 +147,7 @@ dashboard_payload = {
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
-                        "refId": "B",
+                        "refId": "C",
                         "rawSql": '''
                             SELECT 
                               date_trunc('second', snapshot_timestamp) AS time,
@@ -169,6 +171,7 @@ dashboard_payload = {
                     }
                 },
                 "options": {
+                    "stacked": True,
                     "tooltip": {
                         "mode": "single"
                     },
