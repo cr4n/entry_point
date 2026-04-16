@@ -1,9 +1,11 @@
-FROM python:3.7
+FROM python:3.11-slim
 
-# Install necessary dependencies including psql
-RUN apt-get update && apt-get install -y \
-postgresql-client \
-&& rm -rf /var/lib/apt/lists/*
+# Install necessary dependencies including psql and build tools for psycopg2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app

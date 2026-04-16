@@ -32,7 +32,7 @@ docker-compose up --build
 
 4. Open Grafana in a Web browser - (user:admin/password:admin):
 ```
-https://localhost:3000
+http://localhost:3000
 ```
 and update the password in the connector to `postgres` **(REQUIRED)**
 

@@ -5,7 +5,8 @@ import os
 import time
 import pika
 
-# entry_point_address = Web3.to_checksum_address("0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789")
+MAX_RETRIES = 10
+RETRY_DELAY = 5
 
 def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,27 +19,38 @@ alchemy_url = os.getenv('ALCHEMY_URL')
 if not alchemy_url:
     raise ValueError("ALCHEMY_URL environment variable not set or is None")
 else:
-    logger.info(f"ALCHEMY_URL: {alchemy_url}")
+    logger.info("ALCHEMY_URL loaded successfully")
 
 
 entry_point_address = os.getenv('ENTRY_POINT_ADDRESS')
 if not entry_point_address:
-    raise ValueError("entry_point_address environment variable not set or is None")
+    raise ValueError("ENTRY_POINT_ADDRESS environment variable not set or is None")
 else:
-    logger.info(f"entry_point_address: {entry_point_address}")
+    logger.info(f"ENTRY_POINT_ADDRESS: {entry_point_address}")
 
 # Setup Web3 connection using Alchemy
 logger.info('Connecting to Alchemy...')
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
 
-# Setup RabbitMQ connection 
-logger.info('Waiting for RabbitMQ...')
-time.sleep(10)
-logger.info('Connecting to RabbitMQ...')
-connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-channel = connection.channel()
-channel.queue_declare(queue='user_operations')
-logger.info('Connected to RabbitMQ!')
+# Setup RabbitMQ connection with retry logic
+def connect_to_rabbitmq():
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            logger.info(f'Connecting to RabbitMQ (attempt {attempt}/{MAX_RETRIES})...')
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+            channel = connection.channel()
+            channel.queue_declare(queue='user_operations')
+            logger.info('Connected to RabbitMQ!')
+            return connection, channel
+        except pika.exceptions.AMQPConnectionError:
+            if attempt < MAX_RETRIES:
+                logger.warning(f'RabbitMQ not ready, retrying in {RETRY_DELAY}s...')
+                time.sleep(RETRY_DELAY)
+            else:
+                logger.error('Failed to connect to RabbitMQ after max retries')
+                raise
+
+connection, channel = connect_to_rabbitmq()
 
 # Define the contract ABI
 contract_abi = [
@@ -98,6 +110,7 @@ try:
         for event in event_filter.get_new_entries():
             logger.info('New event detected!')
             handle_event(event)
+        time.sleep(2)
 finally:
     logger.info('Stopped monitoring events')
     connection.close()

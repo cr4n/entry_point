@@ -6,6 +6,9 @@ import time
 import psycopg2 as pg
 import pika
 
+MAX_RETRIES = 10
+RETRY_DELAY = 5
+
 def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     return logging.getLogger(__name__)
@@ -23,15 +26,20 @@ postgres_params = {
 
 def connect_to_postgres(params):
     """
-    Connects to the PostgreSQL db
+    Connects to the PostgreSQL db with retry logic.
     """
-    try:
-        conn = pg.connect(**params)
-        logger.info("Connected to PostgreSQL database")
-        return conn
-    except Exception as e:
-        logger.error(f"Failed to connect to PostgreSQL: {e}")
-        raise
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            conn = pg.connect(**params)
+            logger.info("Connected to PostgreSQL database")
+            return conn
+        except Exception as e:
+            if attempt < MAX_RETRIES:
+                logger.warning(f"Failed to connect to PostgreSQL (attempt {attempt}/{MAX_RETRIES}): {e}")
+                time.sleep(RETRY_DELAY)
+            else:
+                logger.error(f"Failed to connect to PostgreSQL after {MAX_RETRIES} attempts: {e}")
+                raise
 
 def load_csv_to_postgres(csv_file_path, conn, table_name):
     """
@@ -90,19 +98,25 @@ def setup_database(conn):
 
 def get_rabbitmq_connection():
     """
-    Connects to the RabbitMQ server.
+    Connects to the RabbitMQ server with retry logic.
     """
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-        logger.info("Connected to RabbitMQ")
-        return connection
-    except Exception as e:
-        logger.error(f"Failed to connect to RabbitMQ: {e}")
-        raise
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+            logger.info("Connected to RabbitMQ")
+            return connection
+        except pika.exceptions.AMQPConnectionError:
+            if attempt < MAX_RETRIES:
+                logger.warning(f"RabbitMQ not ready (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logger.error(f"Failed to connect to RabbitMQ after {MAX_RETRIES} attempts")
+                raise
 
 def insert_event_to_db(conn, event):
     """
-    Inserts events from the queue into a table.    
+    Inserts events from the queue into a table.
+    Reconnects if the connection is closed.
     """
     insert_query = """
     INSERT INTO pipeline.raw_user_operations (
@@ -128,27 +142,49 @@ def insert_event_to_db(conn, event):
         conn.rollback()
         logger.error(f"Failed to insert event into PostgreSQL: {e}")
 
-def callback(ch, method, properties, body):
+class Consumer:
     """
-    Callback function to be called when a message is received from the queue.
+    Consumer that maintains a persistent PostgreSQL connection
+    and processes messages from RabbitMQ.
     """
-    logger.info(f"Received event - {body}")
-    event = json.loads(body)
-    conn = None
-    try:
-        conn = connect_to_postgres(postgres_params)
-        insert_event_to_db(conn, event)
-    finally:
-        if conn:
-            conn.close()
-    
+    def __init__(self, postgres_params):
+        self.postgres_params = postgres_params
+        self.db_conn = None
+
+    def get_db_connection(self):
+        """Returns the existing connection or creates a new one."""
+        if self.db_conn is None or self.db_conn.closed:
+            self.db_conn = connect_to_postgres(self.postgres_params)
+        return self.db_conn
+
+    def callback(self, ch, method, properties, body):
+        """
+        Callback function to be called when a message is received from the queue.
+        Reuses a persistent database connection for better performance.
+        """
+        logger.info(f"Received event - {body}")
+        event = json.loads(body)
+        try:
+            conn = self.get_db_connection()
+            insert_event_to_db(conn, event)
+        except Exception as e:
+            logger.error(f"Error processing event: {e}")
+            # Reset connection on failure so it reconnects next time
+            if self.db_conn and not self.db_conn.closed:
+                self.db_conn.close()
+            self.db_conn = None
+
+    def close(self):
+        """Close the persistent database connection."""
+        if self.db_conn and not self.db_conn.closed:
+            self.db_conn.close()
+            logger.info("PostgreSQL connection closed")
+
 def main():
     """
     Main function to set up the PostgreSQL database, connect to RabbitMQ,
     and start consuming messages.
     """
-    time.sleep(10) # Wait for RabbitMQ and Postgres to be ready
-
     logger.info("Connecting to PostgreSQL...")
     conn = connect_to_postgres(postgres_params)
     setup_database(conn)
@@ -159,13 +195,15 @@ def main():
     channel = connection.channel()
     channel.queue_declare(queue='user_operations')
 
-    channel.basic_consume(queue='user_operations', on_message_callback=callback, auto_ack=True)
+    consumer = Consumer(postgres_params)
+    channel.basic_consume(queue='user_operations', on_message_callback=consumer.callback, auto_ack=True)
     logger.info('Waiting for messages. CTRL+C to exit.')
     try:
         channel.start_consuming()
     except KeyboardInterrupt: # CTRL + C halts the consumer
         channel.stop_consuming()
     finally:
+        consumer.close()
         connection.close()
         logger.info('Connection to RabbitMQ closed')
 
