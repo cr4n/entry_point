@@ -1,5 +1,8 @@
 # Entry Point Data Pipeline
 
+## License
+This project is proprietary. See `LICENSE` for usage restrictions and licensing terms.
+
 ## Overview
 This streaming data pipeline ingests EntryPoint `UserOperationEvent` logs with Alchemy, decodes the surrounding `handleOps` transaction, processes the enriched payload with RabbitMQ, and stores it in PostgreSQL. The pipeline is containerized using Docker and Grafana serves data visualisations. It works near real time. No previous or historical data is inserted.
 
