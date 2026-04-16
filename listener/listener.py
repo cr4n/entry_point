@@ -8,6 +8,7 @@ import time
 from eth_abi import encode
 import pika
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "10"))
 RETRY_BASE_DELAY_SECONDS = float(os.getenv("RETRY_BASE_DELAY_SECONDS", "5"))
@@ -35,6 +36,13 @@ def _normalize_address(value):
 
 def _bytes_to_hex(value: bytes) -> str:
     return Web3.to_hex(value)
+
+def _normalize_hash_hex(value) -> str:
+    if isinstance(value, bytes):
+        value = value.hex()
+    elif hasattr(value, "hex") and not isinstance(value, str):
+        value = value.hex()
+    return value[2:] if isinstance(value, str) and value.startswith("0x") else value
 
 def _keccak_hex(value: bytes) -> str:
     return Web3.keccak(value).hex()
@@ -86,12 +94,12 @@ def _compute_user_op_hash(user_op: dict, chain_id: int) -> str:
             Web3.keccak(user_op["paymasterAndData"]),
         ],
     )
-    return Web3.keccak(
+    return _normalize_hash_hex(Web3.keccak(
         encode(
             ["bytes32", "address", "uint256"],
             [Web3.keccak(packed_user_op), ENTRY_POINT_ADDRESS, chain_id],
         )
-    ).hex()
+    ).hex())
 
 def _normalize_user_op(user_op: dict) -> dict:
     return {
@@ -171,6 +179,7 @@ ENTRY_POINT_ABI = _load_entry_point_abi()
 # Setup Web3 connection using Alchemy
 logger.info('Connecting to Alchemy...')
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
+web3.middleware_onion.inject(geth_poa_middleware, layer=0)
 CHAIN_ID = web3.eth.chain_id
 transaction_cache = OrderedDict()
 
@@ -284,7 +293,7 @@ def _decode_transaction_context(transaction_hash):
 # Convert event to dictionary
 def to_dict(event):
     event_dict = {
-        "userOpHash": event['args']['userOpHash'].hex(),
+        "userOpHash": _normalize_hash_hex(event['args']['userOpHash']),
         "sender": event['args']['sender'],
         "paymaster": event['args']['paymaster'],
         "nonce": event['args']['nonce'],
