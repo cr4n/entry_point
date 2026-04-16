@@ -2,12 +2,37 @@
 import os
 import json
 import logging
+import random
 import time
 import psycopg2 as pg
 import pika
 
-MAX_RETRIES = 10
-RETRY_DELAY = 5
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "10"))
+RETRY_BASE_DELAY_SECONDS = float(os.getenv("RETRY_BASE_DELAY_SECONDS", "5"))
+RETRY_MAX_DELAY_SECONDS = float(os.getenv("RETRY_MAX_DELAY_SECONDS", "60"))
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://rabbitmq:5672")
+QUEUE_NAME = os.getenv("RABBITMQ_QUEUE", "user_operations")
+
+def _retry_sleep_seconds(attempt: int) -> float:
+    delay = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)))
+    jitter = random.uniform(0, delay * 0.2)
+    return delay + jitter
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"{name} environment variable not set or is empty")
+    return value
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError as e:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from e
 
 def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,11 +42,11 @@ logger = setup_logging()
 
 # PostgreSQL connection parameters
 postgres_params = {
-    'host': os.getenv('POSTGRES_HOST'),
-    'port': 5432,
-    'dbname': os.getenv('POSTGRES_DB'),
-    'user': os.getenv('POSTGRES_USER'),
-    'password': os.getenv('POSTGRES_PASSWORD')
+    "host": _require_env("POSTGRES_HOST"),
+    "port": _env_int("POSTGRES_PORT", 5432),
+    "dbname": _require_env("POSTGRES_DB"),
+    "user": _require_env("POSTGRES_USER"),
+    "password": _require_env("POSTGRES_PASSWORD"),
 }
 
 def connect_to_postgres(params):
@@ -36,7 +61,7 @@ def connect_to_postgres(params):
         except Exception as e:
             if attempt < MAX_RETRIES:
                 logger.warning(f"Failed to connect to PostgreSQL (attempt {attempt}/{MAX_RETRIES}): {e}")
-                time.sleep(RETRY_DELAY)
+                time.sleep(_retry_sleep_seconds(attempt))
             else:
                 logger.error(f"Failed to connect to PostgreSQL after {MAX_RETRIES} attempts: {e}")
                 raise
@@ -102,13 +127,16 @@ def get_rabbitmq_connection():
     """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
             logger.info("Connected to RabbitMQ")
             return connection
         except pika.exceptions.AMQPConnectionError:
             if attempt < MAX_RETRIES:
-                logger.warning(f"RabbitMQ not ready (attempt {attempt}/{MAX_RETRIES}), retrying in {RETRY_DELAY}s...")
-                time.sleep(RETRY_DELAY)
+                sleep_for = _retry_sleep_seconds(attempt)
+                logger.warning(
+                    f"RabbitMQ not ready (attempt {attempt}/{MAX_RETRIES}), retrying in {sleep_for:.1f}s..."
+                )
+                time.sleep(sleep_for)
             else:
                 logger.error(f"Failed to connect to RabbitMQ after {MAX_RETRIES} attempts")
                 raise
@@ -141,6 +169,7 @@ def insert_event_to_db(conn, event):
     except Exception as e:
         conn.rollback()
         logger.error(f"Failed to insert event into PostgreSQL: {e}")
+        raise
 
 class Consumer:
     """
@@ -162,17 +191,24 @@ class Consumer:
         Callback function to be called when a message is received from the queue.
         Reuses a persistent database connection for better performance.
         """
-        logger.info(f"Received event - {body}")
-        event = json.loads(body)
         try:
+            logger.info(f"Received event - {body}")
+            event = json.loads(body)
             conn = self.get_db_connection()
             insert_event_to_db(conn, event)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.error(f"Dropping invalid message (will not requeue): {e}")
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
         except Exception as e:
             logger.error(f"Error processing event: {e}")
             # Reset connection on failure so it reconnects next time
             if self.db_conn and not self.db_conn.closed:
                 self.db_conn.close()
             self.db_conn = None
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def close(self):
         """Close the persistent database connection."""
@@ -193,10 +229,11 @@ def main():
     logger.info("Connecting to RabbitMQ...")
     connection = get_rabbitmq_connection()
     channel = connection.channel()
-    channel.queue_declare(queue='user_operations')
+    channel.queue_declare(queue=QUEUE_NAME)
+    channel.basic_qos(prefetch_count=10)
 
     consumer = Consumer(postgres_params)
-    channel.basic_consume(queue='user_operations', on_message_callback=consumer.callback, auto_ack=True)
+    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=consumer.callback, auto_ack=False)
     logger.info('Waiting for messages. CTRL+C to exit.')
     try:
         channel.start_consuming()

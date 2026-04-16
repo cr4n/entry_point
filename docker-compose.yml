@@ -30,7 +30,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -63,6 +63,8 @@ services:
     environment:
       - ALCHEMY_URL=${ALCHEMY_URL}
       - ENTRY_POINT_ADDRESS=${ENTRY_POINT_ADDRESS}
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - RABBITMQ_QUEUE=user_operations
 
   consumer:
     container_name: consumer
@@ -75,6 +77,7 @@ services:
         condition: service_healthy
     environment:
       - RABBITMQ_URL=amqp://rabbitmq:5672
+      - RABBITMQ_QUEUE=user_operations
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_USER=${POSTGRES_USER}
