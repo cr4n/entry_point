@@ -1,13 +1,13 @@
 # Entry Point Data Pipeline
 
 ## Overview
-This streaming data pipeline ingests User Operation events with Alchemy, processes them using RabbitMQ for message queuing, and store them in a PostgreSQL database. The pipeline is containerized using Docker and Grafana serves data visualisations. It works near real time. No previous or historical data is inserted.
+This streaming data pipeline ingests EntryPoint `UserOperationEvent` logs with Alchemy, decodes the surrounding `handleOps` transaction, processes the enriched payload with RabbitMQ, and stores it in PostgreSQL. The pipeline is containerized using Docker and Grafana serves data visualisations. It works near real time. No previous or historical data is inserted.
 
 ## Modules
 
-- **Listener**: Receives User Operations events from  Alchemy and processes them with RabbitMQ.
+- **Listener**: Receives EntryPoint events from Alchemy, decodes the matching `handleOps` calldata, and publishes enriched UserOperation payloads to RabbitMQ.
 - **Consumer**: Writes the received events from RabbitMQ into a PostgreSQL database and loads the Bundlers list.
-- **Dashboard**: Displays a chart in Grafana for User Operation events from the Entry Point contract identifying Biconomy bundlers.
+- **Dashboard**: Displays bundler activity, sponsorship mix, and prefund versus actual gas cost in Grafana.
 
 ## Pipeline Diagram
 ![Pipeline Diagram](./diagram.png)
@@ -24,6 +24,8 @@ cd entry_point
    - `ALCHEMY_URL`: Alchemy URL for querying blockchain data
    - `ENTRY_POINT_ADDRESS`: Ethereum address to pull events from
    - Leave the rest as it comes
+
+The stored payload now includes the emitted event fields plus decoded `handleOps` metadata such as bundler, beneficiary, bundle position, gas limits, EIP-1559 fee fields, computed `userOpHash`, and estimated `requiredPrefund`.
 
 3. Build and start the services:
 ```
@@ -48,8 +50,8 @@ docker cp postgres:/tmp/entry_point_db.dump ./entry_point_db.dump
 ```
 - Make a CSV dump:
 ```
-docker exec -it postgres psql -U postgres -d BICO -c "\COPY (SELECT * FROM pipeline.raw_user_operation) TO '/tmp/raw_user_operation.csv' CSV HEADER;"
-docker cp postgres:/tmp/raw_user_operation.csv ./raw_user_operation.csv
+docker exec -it postgres psql -U postgres -d BICO -c "\COPY (SELECT * FROM pipeline.raw_user_operations) TO '/tmp/raw_user_operations.csv' CSV HEADER;"
+docker cp postgres:/tmp/raw_user_operations.csv ./raw_user_operations.csv
 ```
 
 **Notes**

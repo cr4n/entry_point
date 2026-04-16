@@ -14,6 +14,51 @@ RETRY_MAX_DELAY_SECONDS = float(os.getenv("RETRY_MAX_DELAY_SECONDS", "60"))
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://rabbitmq:5672")
 QUEUE_NAME = os.getenv("RABBITMQ_QUEUE", "user_operations")
 
+RAW_USER_OPERATION_FIELDS = [
+    ("user_op_hash", "userOpHash"),
+    ("sender", "sender"),
+    ("paymaster", "paymaster"),
+    ("nonce", "nonce"),
+    ("success", "success"),
+    ("actual_gas_cost", "actualGasCost"),
+    ("actual_gas_used", "actualGasUsed"),
+    ("event", "event"),
+    ("log_index", "logIndex"),
+    ("transaction_index", "transactionIndex"),
+    ("transaction_hash", "transactionHash"),
+    ("address", "address"),
+    ("block_hash", "blockHash"),
+    ("block_number", "blockNumber"),
+    ("chain_id", "chainId"),
+    ("bundler", "bundler"),
+    ("beneficiary", "beneficiary"),
+    ("entry_point_method", "entryPointMethod"),
+    ("bundle_index", "bundleIndex"),
+    ("bundle_size", "bundleSize"),
+    ("block_timestamp", "blockTimestamp"),
+    ("block_base_fee_per_gas", "blockBaseFeePerGas"),
+    ("effective_gas_price", "effectiveGasPrice"),
+    ("call_gas_limit", "callGasLimit"),
+    ("verification_gas_limit", "verificationGasLimit"),
+    ("pre_verification_gas", "preVerificationGas"),
+    ("max_fee_per_gas", "maxFeePerGas"),
+    ("max_priority_fee_per_gas", "maxPriorityFeePerGas"),
+    ("user_op_gas_price", "userOpGasPrice"),
+    ("required_prefund", "requiredPrefund"),
+    ("factory", "factory"),
+    ("nonce_key", "nonceKey"),
+    ("nonce_sequence", "nonceSequence"),
+    ("init_code_hash", "initCodeHash"),
+    ("init_code_length", "initCodeLength"),
+    ("call_data_hash", "callDataHash"),
+    ("call_data_length", "callDataLength"),
+    ("paymaster_and_data_hash", "paymasterAndDataHash"),
+    ("paymaster_and_data_length", "paymasterAndDataLength"),
+    ("paymaster_data_length", "paymasterDataLength"),
+    ("signature_hash", "signatureHash"),
+    ("signature_length", "signatureLength"),
+]
+
 def _retry_sleep_seconds(attempt: int) -> float:
     delay = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)))
     jitter = random.uniform(0, delay * 0.2)
@@ -48,6 +93,52 @@ postgres_params = {
     "user": _require_env("POSTGRES_USER"),
     "password": _require_env("POSTGRES_PASSWORD"),
 }
+
+def _build_raw_user_operations_insert():
+    columns = ", ".join(column for column, _ in RAW_USER_OPERATION_FIELDS)
+    placeholders = ", ".join(["%s"] * len(RAW_USER_OPERATION_FIELDS))
+    return f"""
+    INSERT INTO pipeline.raw_user_operations (
+        snapshot_timestamp, {columns}
+    )
+    VALUES (current_timestamp, {placeholders})
+    """
+
+RAW_USER_OPERATIONS_INSERT = _build_raw_user_operations_insert()
+
+RAW_USER_OPERATION_MIGRATIONS = [
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS chain_id BIGINT",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS bundler VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS beneficiary VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS entry_point_method VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS bundle_index INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS bundle_size INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS block_timestamp BIGINT",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS block_base_fee_per_gas NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS effective_gas_price NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS call_gas_limit NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS verification_gas_limit NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS pre_verification_gas NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS max_fee_per_gas NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS max_priority_fee_per_gas NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS user_op_gas_price NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS required_prefund NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS factory VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS nonce_key NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS nonce_sequence NUMERIC(78, 0)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS init_code_hash VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS init_code_length INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS call_data_hash VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS call_data_length INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS paymaster_and_data_hash VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS paymaster_and_data_length INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS paymaster_data_length INTEGER",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS signature_hash VARCHAR(255)",
+    "ALTER TABLE pipeline.raw_user_operations ADD COLUMN IF NOT EXISTS signature_length INTEGER",
+    "CREATE INDEX IF NOT EXISTS idx_raw_user_operations_snapshot_timestamp ON pipeline.raw_user_operations (snapshot_timestamp)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_user_operations_user_op_hash ON pipeline.raw_user_operations (user_op_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_user_operations_bundler ON pipeline.raw_user_operations (bundler)",
+]
 
 def connect_to_postgres(params):
     """
@@ -99,20 +190,52 @@ def setup_database(conn):
             user_op_hash VARCHAR(255),
             sender VARCHAR(255),
             paymaster VARCHAR(255),
-            nonce NUMERIC,
+            nonce NUMERIC(78, 0),
             success BOOLEAN,
-            actual_gas_cost NUMERIC(35, 0),
-            actual_gas_used NUMERIC(35, 0),
+            actual_gas_cost NUMERIC(78, 0),
+            actual_gas_used NUMERIC(78, 0),
             event VARCHAR(255),
             log_index INTEGER,
             transaction_index INTEGER,
             transaction_hash VARCHAR(255),
             address VARCHAR(255),
             block_hash VARCHAR(255),
-            block_number BIGINT
+            block_number BIGINT,
+            chain_id BIGINT,
+            bundler VARCHAR(255),
+            beneficiary VARCHAR(255),
+            entry_point_method VARCHAR(255),
+            bundle_index INTEGER,
+            bundle_size INTEGER,
+            block_timestamp BIGINT,
+            block_base_fee_per_gas NUMERIC(78, 0),
+            effective_gas_price NUMERIC(78, 0),
+            call_gas_limit NUMERIC(78, 0),
+            verification_gas_limit NUMERIC(78, 0),
+            pre_verification_gas NUMERIC(78, 0),
+            max_fee_per_gas NUMERIC(78, 0),
+            max_priority_fee_per_gas NUMERIC(78, 0),
+            user_op_gas_price NUMERIC(78, 0),
+            required_prefund NUMERIC(78, 0),
+            factory VARCHAR(255),
+            nonce_key NUMERIC(78, 0),
+            nonce_sequence NUMERIC(78, 0),
+            init_code_hash VARCHAR(255),
+            init_code_length INTEGER,
+            call_data_hash VARCHAR(255),
+            call_data_length INTEGER,
+            paymaster_and_data_hash VARCHAR(255),
+            paymaster_and_data_length INTEGER,
+            paymaster_data_length INTEGER,
+            signature_hash VARCHAR(255),
+            signature_length INTEGER
         )
         '''
         cur.execute(create_table_query)
+
+        for migration in RAW_USER_OPERATION_MIGRATIONS:
+            cur.execute(migration)
+
         conn.commit()
         logger.info("Table `raw_user_operations` ensured to exist")
 
@@ -146,24 +269,11 @@ def insert_event_to_db(conn, event):
     Inserts events from the queue into a table.
     Reconnects if the connection is closed.
     """
-    insert_query = """
-    INSERT INTO pipeline.raw_user_operations (
-        snapshot_timestamp, user_op_hash, sender, paymaster, nonce, success, actual_gas_cost, actual_gas_used, 
-        event, log_index, transaction_index, transaction_hash, address, block_hash, block_number
-    )
-    VALUES (current_timestamp, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-
-    data_to_insert = (
-        event['userOpHash'], event['sender'], event['paymaster'], event['nonce'], 
-        event['success'], event['actualGasCost'], event['actualGasUsed'], event['event'], 
-        event['logIndex'], event['transactionIndex'], event['transactionHash'], 
-        event['address'], event['blockHash'], event['blockNumber']
-    )
+    data_to_insert = tuple(event.get(event_key) for _, event_key in RAW_USER_OPERATION_FIELDS)
 
     try:
         cur = conn.cursor()
-        cur.execute(insert_query, data_to_insert)
+        cur.execute(RAW_USER_OPERATIONS_INSERT, data_to_insert)
         conn.commit()
         logger.info("Event inserted into PostgreSQL")
     except Exception as e:

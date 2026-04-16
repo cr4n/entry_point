@@ -16,14 +16,11 @@ HEADERS = {
     "Authorization": f"Bearer {API_KEY}"
 }
 
-print(f"Using API Key: {API_KEY}")
-print(f"Headers: {HEADERS}")
-
 # Define PostgreSQL data source
 data_source_payload = {
     "name": "PostgreSQL",
     "type": "postgres",
-    "url": f'{POSTGRES_HOST}:5432',
+    "url": f"{POSTGRES_HOST}:{POSTGRES_PORT}",
     "access": "proxy",
     "database": POSTGRES_DB,
     "user": POSTGRES_USER,
@@ -35,12 +32,8 @@ data_source_payload = {
     }
 }
 
-print(f"Data Source Payload: {data_source_payload}")
-
 # Create data source
 response = requests.post(f"{GRAFANA_URL}/api/datasources", headers=HEADERS, data=json.dumps(data_source_payload))
-
-print(f"Data Source Creation Response: {response.content}")
 
 if response.status_code == 200:
     print("Data source created successfully.")
@@ -61,7 +54,7 @@ dashboard_payload = {
             {
                 "title": "User Operations Per Hour",
                 "type": "barchart",
-                "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
+                "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
@@ -69,10 +62,11 @@ dashboard_payload = {
                         "rawSql": '''
                             SELECT 
                               date_trunc('hour', snapshot_timestamp) AS time,
-                              CASE WHEN(CONTAINS('0xa', rao.address)) THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              COALESCE(beneficiary_bundler.entity_name, tx_bundler.entity_name, 'Other') AS bundler,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
+                              LEFT JOIN pipeline.bundlers beneficiary_bundler ON lower(beneficiary_bundler.address) = lower(rao.beneficiary)
+                              LEFT JOIN pipeline.bundlers tx_bundler ON lower(tx_bundler.address) = lower(rao.bundler)
                               GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
@@ -100,9 +94,9 @@ dashboard_payload = {
                 }
             },
             {
-                "title": "User Operations Per Minute",
+                "title": "Sponsorship Mix Per Minute",
                 "type": "barchart",
-                "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
+                "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
@@ -110,10 +104,12 @@ dashboard_payload = {
                         "rawSql": '''
                             SELECT 
                               date_trunc('minute', snapshot_timestamp) AS time,
-                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
+                              CASE
+                                WHEN paymaster IS NOT NULL AND lower(paymaster) <> '0x0000000000000000000000000000000000000000' THEN 'Paymaster Sponsored'
+                                ELSE 'Wallet Funded'
+                              END AS sponsor_type,
                               COUNT(*) AS value 
                               FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
                               GROUP BY 1, 2 ORDER BY 1                           
                             ''',
                         "format": "time_series"
@@ -141,21 +137,30 @@ dashboard_payload = {
                 }
             },
             {
-                "title": "User Operations Per Second",
-                "type": "barchart",
-                "gridPos": {"x": 0, "y": 9, "w": 24, "h": 9},
+                "title": "Average Prefund vs Actual Gas Cost",
+                "type": "timeseries",
+                "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
                 "datasource": "PostgreSQL",
                 "targets": [
                     {
                         "refId": "C",
                         "rawSql": '''
-                            SELECT 
-                              date_trunc('second', snapshot_timestamp) AS time,
-                              CASE WHEN(b.entity_name = 'Biconomy') THEN 'Biconomy' ELSE 'Other' END AS bundler,
-                              COUNT(*) AS value 
-                              FROM pipeline.raw_user_operations rao
-                              LEFT JOIN pipeline.bundlers b ON b.address = rao.sender
-                              GROUP BY 1, 2 ORDER BY 1                           
+                            SELECT
+                              date_trunc('minute', snapshot_timestamp) AS time,
+                              'Required Prefund' AS metric,
+                              AVG(required_prefund) / 1e18 AS value
+                            FROM pipeline.raw_user_operations
+                            WHERE required_prefund IS NOT NULL
+                            GROUP BY 1
+                            UNION ALL
+                            SELECT
+                              date_trunc('minute', snapshot_timestamp) AS time,
+                              'Actual Gas Cost' AS metric,
+                              AVG(actual_gas_cost) / 1e18 AS value
+                            FROM pipeline.raw_user_operations
+                            WHERE actual_gas_cost IS NOT NULL
+                            GROUP BY 1
+                            ORDER BY 1
                             ''',
                         "format": "time_series"
                     }
@@ -171,7 +176,6 @@ dashboard_payload = {
                     }
                 },
                 "options": {
-                    "stacked": True,
                     "tooltip": {
                         "mode": "single"
                     },
@@ -195,8 +199,6 @@ dashboard_payload = {
 
 # Create dashboard
 response = requests.post(f"{GRAFANA_URL}/api/dashboards/db", headers=HEADERS, data=json.dumps(dashboard_payload))
-
-print(f"Dashboard Creation Response: {response.content}")
 
 if response.status_code == 200:
     print("Dashboard created successfully.")
