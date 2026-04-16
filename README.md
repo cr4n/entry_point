@@ -19,8 +19,8 @@ This streaming data pipeline ingests EntryPoint `UserOperationEvent` logs with A
 
 1. Clone the repository
 ```
-git clone https://github.com/cr4n/entry_point.git
-cd entry_point
+git clone https://github.com/cr4n/entry-point.git
+cd entry-point
 ```
 
 2. Set up the environment variables in an `.env` file following `env.sample` guidelines:
@@ -48,8 +48,8 @@ docker exec -it postgres psql -U postgres -d BICO -c "select * from pipeline.raw
 ```
 - Make a DB dump:
 ```
-docker exec -it postgres pg_dump -U postgres -d BICO -F c -f /tmp/entry_point_db.dump
-docker cp postgres:/tmp/entry_point_db.dump ./entry_point_db.dump
+docker exec -it postgres pg_dump -U postgres -d BICO -F c -f /tmp/entry-point_db.dump
+docker cp postgres:/tmp/entry-point_db.dump ./entry-point_db.dump
 ```
 - Make a CSV dump:
 ```
