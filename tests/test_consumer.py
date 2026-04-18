@@ -2,12 +2,13 @@ import importlib
 import json
 import os
 import sys
+import tempfile
 import types
 import unittest
 from unittest.mock import MagicMock, patch
 
 
-REPO_ROOT = "/home/runner/work/entry-point/entry-point"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
@@ -99,12 +100,12 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn = MagicMock()
         cursor = conn.cursor.return_value
 
-        csv_path = "/tmp/test_consumer_load.csv"
-        with open(csv_path, "w", encoding="utf-8") as csv_file:
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8", newline="", delete=True) as csv_file:
             csv_file.write("col1,col2\n")
             csv_file.write("a,b\n")
+            csv_file.flush()
 
-        consumer.load_csv_to_postgres(csv_path, conn, "pipeline.table")
+            consumer.load_csv_to_postgres(csv_file.name, conn, "pipeline.table")
 
         cursor.copy_from.assert_called_once()
         conn.commit.assert_called_once()
