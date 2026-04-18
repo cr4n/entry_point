@@ -66,7 +66,7 @@ class TestConsumerHelpers(unittest.TestCase):
             self.assertEqual(consumer._retry_sleep_seconds(999), consumer.RETRY_MAX_DELAY_SECONDS)
 
     def test_require_env_returns_existing_value(self):
-        with patch.dict(os.environ, {"MY_ENV": "value"}, clear=False):
+        with patch.dict(os.environ, {"MY_ENV": "value"}):
             self.assertEqual(consumer._require_env("MY_ENV"), "value")
 
     def test_require_env_raises_when_missing(self):
@@ -100,7 +100,7 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn = MagicMock()
         cursor = conn.cursor.return_value
 
-        with tempfile.NamedTemporaryFile("w+", encoding="utf-8", newline="", delete=True) as csv_file:
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8", newline="") as csv_file:
             csv_file.write("col1,col2\n")
             csv_file.write("a,b\n")
             csv_file.flush()
