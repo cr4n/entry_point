@@ -65,6 +65,12 @@ class TestConsumerHelpers(unittest.TestCase):
         with patch.object(consumer_module.random, "uniform", return_value=0):
             self.assertEqual(consumer_module._retry_sleep_seconds(999), consumer_module.RETRY_MAX_DELAY_SECONDS)
 
+    def test_retry_sleep_seconds_includes_jitter(self):
+        with patch.object(consumer_module.random, "uniform", side_effect=lambda _min, max_value: max_value):
+            expected_delay = consumer_module.RETRY_BASE_DELAY_SECONDS
+            expected_jitter = expected_delay * 0.2
+            self.assertEqual(consumer_module._retry_sleep_seconds(1), expected_delay + expected_jitter)
+
     def test_require_env_returns_existing_value(self):
         with patch.dict(os.environ, {"MY_ENV": "value"}):
             self.assertEqual(consumer_module._require_env("MY_ENV"), "value")
